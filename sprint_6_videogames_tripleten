@@ -1,0 +1,738 @@
+## Inicio
+
+# Cargar todas las librerías
+import pandas as pd
+import numpy as np
+from scipy import stats as st
+from math import factorial
+import matplotlib.pyplot as plt
+
+
+
+## Cargar datos
+
+games = pd.read_csv("/datasets/games.csv")
+
+print(games.head())
+
+
+games.info()
+
+Aquí podemos ver que las columnas relacionadas a ventas y plataforma, no presentan espacios vacíos. 
+
+En cambio, el resto de las columnas si presenta espacios vacíos.
+
+Lo que haremos en la limpieza de datos será:
+
+* Verificar si hay duplicados, en caso de que los haya, buscar una solución.
+* Controlar los espacios vacios. Para cada columna se revisará si existen espacios vacíos, y se buscara la manera de tratarlos (rellenarlos o dejarlos así).
+* Cambiar el formato de fecha a date, lo cual nos facilitará posteriores análisis.
+
+
+
+## Preparar los datos
+
+
+### Reemplazar los nombres de las columnas (poner en minúsculas).
+
+# Reemplazar los nombres de las columnas (poner en minúsculas).
+
+new_columns=[]
+
+for name in games.columns:
+    new_columns.append(name.lower())
+    
+games.columns = new_columns
+
+games.info()
+
+
+
+### Convertir los datos en los tipos necesarios.
+
+#Convertir los datos en los tipos necesarios.
+
+games['year_of_release'] = games['year_of_release'].astype('Int64')
+games.info()
+
+#games["year_of_release"] = games["year_of_release"].dt.year.astype("Int64")
+
+print(games.head())
+
+# Reemplazar 'tbd' con 0
+games['user_score'] = games['user_score'].replace('tbd', '0')
+
+# Si hay comas como separadores decimales, reemplazarlas por puntos
+games['user_score'] = games['user_score'].str.replace(',', '.', regex=False)
+
+# Convertir a float
+games['user_score'] = games['user_score'].astype('float')
+
+# Verificar el resultado
+games.info()
+
+Lo que hicimos hasta aquí fue:
+
+* Los nombres de las columnas ahora son minúsculas, ya que eso facilita el análisis. La probabilidad de cometer errores al llamar a las columnas es menor.
+* Convertimos el tipo de dato de year_of_release a integer, ya que facilita la realización de cálculos y análisis (no lo convertimos a datetime, ya que como solo hay años, esto puede generar errores posteriores)
+
+### Manejo de espacios vacios
+
+print(games['name'].unique())
+print()
+print(games['year_of_release'].unique())
+print()
+print(games['genre'].unique())
+print()
+print(games['critic_score'].unique())
+print()
+print(games['user_score'].unique())
+print()
+print(games['rating'].unique())
+print()
+print(games['platform'].unique())
+
+De esta manera procederemos con los datos vacios 
+
+* name: los rellenaremos con "unknown", esto lo hacemos porque son datos object.
+* year_of_release: los rellenaremos con "0", ya que son datos numericos, que quizas luego usaremos para hacer calculos.
+* genre: los rellenaremos con "unknown", esto lo hacemos porque son datos object.
+* critic_score: los rellenaremos con "0", ya que son datos numericos, que quizas luego usaremos para hacer calculos.
+* user_score: los rellenaremos con "0", ya que son datos numericos, que quizas luego usaremos para hacer calculos.
+* rating: los rellenaremos con "unknown", esto lo hacemos porque son datos object.
+
+Preferimos no dejar en blanco las celdas, ya que esto puede generar posibles errores luego en la realización de cálculos, análisis y gráficos. 
+
+Creemos que hay espacios en blanco por:
+
+* Por errores en el software
+* Errores al convertir los datos de un formato a otro.
+
+
+Para facilitar los calculos posteriores, los valores 'tbd' en en user_score, seran reemplazados por 0.
+
+# reemplazo de NaN 
+
+games['name'] = games['name'].fillna('unknown')
+games['year_of_release']=games['year_of_release'].fillna(0)
+games['genre']=games['genre'].fillna('unknown')
+games['critic_score'] = games['critic_score'].fillna(0)
+games['user_score'] = games['user_score'].fillna(0)
+games['rating'] = games['rating'].fillna('unknown')
+
+games.info()
+
+
+
+
+# Calcular las ventas totales (la suma de las ventas en todas las regiones) 
+#para cada juego y colocar estos valores en una columna separada.
+    
+games['total_sales'] = games['na_sales'] + games['eu_sales'] + games['jp_sales'] + games['other_sales']
+
+print(games.head())
+
+
+
+## Analiza los datos
+
+### Mirar cuántos juegos fueron lanzados en diferentes años. ¿Son significativos los datos de cada período?
+
+# Mirar cuántos juegos fueron lanzados en diferentes años. ¿Son significativos los datos de cada período?
+
+game_by_year= games.groupby('year_of_release')['name'].count()
+print(game_by_year)
+print()
+print('La media es:',game_by_year.mean())
+print('La mediana es:',game_by_year.median())
+
+#game_by_year_df = game_by_year.reset_index()
+#game_by_year_df.plot(x='year_of_release',y='name',figsize=[8,8])
+#plt.show()
+
+# Filtrar el valor 0 si es un año no válido
+game_by_year_df = game_by_year.reset_index()
+game_by_year_df = game_by_year_df[game_by_year_df['year_of_release'] != 0]
+
+# Ordenar por año para asegurar que el gráfico sea cronológico
+game_by_year_df = game_by_year_df.sort_values('year_of_release')
+
+# Crear el gráfico usando plt directamente
+plt.figure(figsize=(10, 8))
+plt.bar(range(len(game_by_year_df)), game_by_year_df['name'])
+plt.title('Número de juegos lanzados por año')
+plt.xlabel('Año de lanzamiento')
+plt.ylabel('Cantidad de juegos')
+plt.grid(axis='y')
+
+# Añadir los años como etiquetas en el eje x
+plt.xticks(range(len(game_by_year_df)), game_by_year_df['year_of_release'], rotation=90)
+
+plt.tight_layout()
+plt.show()
+
+Podemos ver que:
+
+* Los años entre 2006 y 2011 fueron los años en los que más juegos fueron sacados.
+* A partir del año 2012, la cantidad de juegos publicados disminuyó.
+* Los años 2008 y 2009 fueron los años con mayor número de juegos lanzados.
+
+La diferencia si es bastante considerable, si comparamos los años 2006 a 2011 con el resto. Pero al fijarnos en la media y la mediana, no hay una diferencia tan considerable entre ellas.
+
+
+### Observa cómo varían las ventas de una plataforma a otra. Elige las plataformas con las mayores ventas totales y construye una distribución basada en los datos de cada año. Busca las plataformas que solían ser populares pero que ahora no tienen ventas. ¿Cuánto tardan generalmente las nuevas plataformas en aparecer y las antiguas en desaparecer?
+
+games.info()
+
+#agrupar las ventas totales por plataforma
+sales_platform = games.groupby('platform')['total_sales'].sum()
+print(sales_platform)
+
+#Calcular el top 10
+top10_platforms = sales_platform.sort_values(ascending=False).head(10)
+print(top10_platforms)
+
+import seaborn as sns
+
+top_platform_list = top10_platforms.index
+filtered_games = games[games['platform'].isin(top_platform_list)]
+
+sales_by_year_top10 = filtered_games.groupby(['year_of_release','platform'])['total_sales'].sum()
+
+# Resetear el índice para tener año y plataforma como columnas
+df_sales_top10 = sales_by_year_top10.reset_index()
+
+# Filtrar años después de 1990 para mejor visualización
+df_sales_top10_recent = df_sales_top10.query('year_of_release > 1990')
+
+# Crear el gráfico con una línea para cada plataforma
+plt.figure(figsize=(14, 8))
+sns.lineplot(data=df_sales_top10_recent, x='year_of_release', y='total_sales', hue='platform', marker='o')
+
+# Personalizar el gráfico
+plt.title('Variación de ventas por año por plataforma')
+plt.xlabel('Año de lanzamiento')
+plt.ylabel('Ventas totales (millones)')
+plt.grid(True, linestyle='--', alpha=0.7)
+plt.legend(title="Plataforma", bbox_to_anchor=(1.05, 1), loc='upper left')
+plt.tight_layout()
+
+plt.show()
+
+
+
+#cuales son las plataformas mas antiguas
+
+last_year_sales = games.groupby("platform")["year_of_release"].max()
+print(last_year_sales.sort_values(ascending=True))  # Ordenar para ver las más antiguas
+
+
+#vida de una plataforma
+platform_lifetime = games.groupby("platform")["year_of_release"].agg(["min", "max"])
+platform_lifetime["lifetime"] = platform_lifetime["max"] - platform_lifetime["min"]
+print(platform_lifetime.sort_values(by="lifetime", ascending=False))
+
+
+### Determina para qué período debes tomar datos. Para hacerlo mira tus respuestas a las preguntas anteriores. Los datos deberían permitirte construir un modelo para 2017.
+
+Elegiremos los datos de los últimos 5 años.
+
+last_5_years = games.query('year_of_release>2010')
+print(last_5_years)
+
+*A partir de ahora, usaremos "last_5_years"*
+
+
+
+### ¿Qué plataformas son líderes en ventas? ¿Cuáles crecen y cuáles se reducen? Elige varias plataformas potencialmente rentables.
+
+#agrupar las ventas totales por plataforma
+sales_platform_5 = last_5_years.groupby('platform')['total_sales'].sum()
+print(sales_platform_5)
+
+top_sales_5 = sales_platform_5.sort_values(ascending=False).head(5)
+print(top_sales_5)
+
+least_platforms = sales_platform_5.sort_values(ascending=True).head(5)
+print(least_platforms)
+
+import seaborn as sns
+
+# Combinar ambos DataFrames
+combined_platforms = pd.concat([top_sales_5, least_platforms])
+
+# Crear una figura con dos subplots
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
+
+# Gráfico para las plataformas con mayores ventas
+sns.barplot(x=top_sales_5.values, y=top_sales_5.index, ax=ax1, palette='Blues_d')
+ax1.set_title('Top 10 Plataformas por Ventas')
+ax1.set_xlabel('Ventas Totales (millones)')
+ax1.set_ylabel('Plataforma')
+
+# Gráfico para las plataformas con menores ventas
+sns.barplot(x=least_platforms.values, y=least_platforms.index, ax=ax2, palette='Reds_d')
+ax2.set_title('10 Plataformas con Menores Ventas')
+ax2.set_xlabel('Ventas Totales (millones)')
+ax2.set_ylabel('')  # No repetimos la etiqueta del eje Y
+
+plt.tight_layout()
+plt.show()
+
+Como podemos ver en los graficos, las plataformas pertenecientes al top 10 tienen mejores ventas. Es por eso que se elegiran esas plataformas:
+
+* PS3
+* X360
+* PS4
+* 3DS
+* XOne
+
+
+
+### Crea un diagrama de caja para las ventas globales de todos los juegos, desglosados por plataforma. ¿Son significativas las diferencias en las ventas? ¿Qué sucede con las ventas promedio en varias plataformas? Describe tus hallazgos.
+
+#print(sales_platform)
+#sns.boxplot(y=sales_platform_5,orient='v')
+#plt.show()
+
+# Crear el boxplot con mejor legibilidad
+plt.figure(figsize=(10, 8))
+
+# Usar un boxplot con opciones personalizadas
+ax = sns.boxplot(x='platform', y='total_sales', data=last_5_years, 
+                 flierprops={'marker': 'o', 'markersize': 3, 'alpha': 0.5})
+
+# Añadir también puntos para ver la distribución de los datos
+sns.stripplot(x='platform', y='total_sales', data=last_5_years, 
+              size=4, color='.3', alpha=0.2, jitter=True)
+
+# Limitar el eje Y para ver mejor las cajas (ajusta estos valores según tus datos)
+plt.ylim(0, 5)  # Muestra ventas de 0 a 5 millones
+
+# Añadir título y etiquetas
+plt.title('Distribución de ventas por plataforma (2011-2016)')
+plt.xlabel('Plataforma')
+plt.ylabel('Ventas totales (millones)')
+plt.xticks(rotation=45)
+
+# Añadir anotación para explicar los límites
+plt.annotate('Nota: Se han limitado los valores a 5M para mejor visualización.\nExisten valores atípicos mayores.', 
+             xy=(0.5, 0.97), xycoords='figure fraction', 
+             ha='center', fontsize=10, style='italic')
+
+plt.tight_layout()
+plt.show()
+
+Hallazgos:
+
+* Todas las plataformas presentan valores atípicos.
+* La mayoría de las plataformas tienen sus datos concentrados en ventas bajas (cajas cercanas a 0).
+* Las plataformas con mayores ventas son PS3, X360, PS4, XOne.
+* Varios boxplot tienen datos sesgados a la izquierda, por lo que podemos deducir que la media es menor a la mediana.
+
+
+
+### Mira cómo las reseñas de usuarios y profesionales afectan las ventas de una plataforma popular (tu elección). Crea un gráfico de dispersión y calcula la correlación entre las reseñas y las ventas. Saca conclusiones.
+
+
+#games.info()
+
+#print(games.head())
+
+#top10_platform_list = top10_platforms.index
+#filtered_10_games = games[games['platform'].isin(top10_platform_list)]
+
+#score_platform = filtered_10_games.groupby('platform')['critic_score','user_score'].sum()
+#print(score_platform)
+
+score_platforms = last_5_years.groupby('platform')['critic_score','user_score'].sum()
+print(score_platforms.sort_values(by=['critic_score','user_score'],ascending=False))
+
+ps3_graphic = last_5_years[last_5_years['platform']=='PS3']
+print(ps3_graphic)
+
+# Filtrar solo los juegos de PS3 que tienen puntuaciones completas
+ps3_graphic = last_5_years[last_5_years['platform'] == 'PS3'].dropna(subset=['critic_score', 'user_score', 'total_sales'])
+
+# Crear subplots para mostrar dos gráficos de dispersión
+fig, axes = plt.subplots(1, 2, figsize=(16, 7))
+
+# Gráfico de dispersión para puntuaciones de críticos vs ventas
+sns.scatterplot(x='critic_score', y='total_sales', data=ps3_graphic, ax=axes[0], alpha=0.7)
+axes[0].set_title('Relación entre puntuación de críticos y ventas (PS3)')
+axes[0].set_xlabel('Puntuación de críticos')
+axes[0].set_ylabel('Ventas totales (millones)')
+axes[0].grid(True, linestyle='--', alpha=0.7)
+
+# Calcular y mostrar la correlación
+corr_critic = ps3_graphic['critic_score'].corr(ps3_graphic['total_sales'])
+axes[0].annotate(f'Correlación: {corr_critic:.2f}', xy=(0.05, 0.95), xycoords='axes fraction', 
+                 fontsize=12, bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="gray", alpha=0.8))
+
+# Gráfico de dispersión para puntuaciones de usuarios vs ventas
+sns.scatterplot(x='user_score', y='total_sales', data=ps3_graphic, ax=axes[1], alpha=0.7)
+axes[1].set_title('Relación entre puntuación de usuarios y ventas (PS3)')
+axes[1].set_xlabel('Puntuación de usuarios')
+axes[1].set_ylabel('Ventas totales (millones)')
+axes[1].grid(True, linestyle='--', alpha=0.7)
+
+# Calcular y mostrar la correlación
+corr_user = ps3_graphic['user_score'].corr(ps3_graphic['total_sales'])
+axes[1].annotate(f'Correlación: {corr_user:.2f}', xy=(0.05, 0.95), xycoords='axes fraction', 
+                 fontsize=12, bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="gray", alpha=0.8))
+
+# Ajustar el layout y mostrar
+plt.tight_layout()
+plt.show()
+
+# Imprimir los coeficientes de correlación para tener los valores exactos
+print(f"Correlación entre puntuación de críticos y ventas: {corr_critic:.4f}")
+print(f"Correlación entre puntuación de usuarios y ventas: {corr_user:.4f}")
+
+*En este gráfico, podemos ver que para el juego PS3 la correlación entre las críticas y ventas es baja. Esto quiere decir que, como podemos ver en el gráfico, a pesar de que el juego tiene buenas críticas por de los usuarios y críticos, las ventas no son muy altas.*
+
+
+
+### Teniendo en cuenta tus conclusiones compara las ventas de los mismos juegos en otras plataformas.
+
+juegos_plat= last_5_years.groupby(['platform','name'])['critic_score','user_score'].sum()
+print(juegos_plat)
+
+#games.info()
+
+ #Paso 1: Encontrar juegos que aparecen en múltiples plataformas
+juegos_multiplataforma = last_5_years['name'].value_counts()
+juegos_multiplataforma = juegos_multiplataforma[juegos_multiplataforma > 1].index.tolist()
+
+# Paso 2: Filtrar el dataframe original para incluir solo estos juegos
+games_multi = last_5_years[last_5_years['name'].isin(juegos_multiplataforma)]
+
+# Paso 3: Agrupar por nombre de juego y plataforma, y calcular ventas totales
+comparacion_ventas = games_multi.groupby(['name', 'platform'])['total_sales'].sum().reset_index()
+
+# Paso 4: Convertir a formato de tabla pivote para comparar más fácilmente
+tabla_comparativa = comparacion_ventas.pivot(index='name', columns='platform', values='total_sales')
+
+#Limitar a los juegos con más ventas para simplificar la visualización
+top_juegos = games_multi.groupby('name')['total_sales'].sum().nlargest(10).index
+tabla_top_juegos = tabla_comparativa.loc[top_juegos]
+
+plt.figure(figsize=(7,5))
+for juego in top_juegos[:5]:  # Limitamos a 5 juegos para mejor visualización
+    datos_juego = comparacion_ventas[comparacion_ventas['name'] == juego]
+    plt.plot(datos_juego['platform'], datos_juego['total_sales'], 'o-', label=juego)
+
+plt.title('Comparación de ventas del mismo juego en diferentes plataformas')
+plt.xlabel('Plataforma')
+plt.ylabel('Ventas totales (millones)')
+plt.xticks(rotation=45)
+plt.legend(loc='best')
+plt.grid(True, linestyle='--', alpha=0.7)
+plt.tight_layout()
+plt.show()
+
+print()
+print(tabla_comparativa)
+
+
+Vemos que:
+
+* PS3, PS4, X360 presentan buenas ventas para el juego GTA
+
+* En este gráfico podemos ver lo que veíamos en el gráfico anterior, la plataforma PS3 tiene ventas variadas según el juego (independientemente de las críticas)
+
+* En este gráfico, podemos ver que las plataformas correspondientes a Wii, tienen muy pocas ventas en comparación a las otras.
+
+### Echa un vistazo a la distribución general de los juegos por género. ¿Qué se puede decir de los géneros más rentables? ¿Puedes generalizar acerca de los géneros con ventas altas y bajas?
+
+genre_sales = last_5_years.groupby('genre')['total_sales'].sum()
+print(genre_sales.sort_values(ascending=False))
+
+genre_sales_sorted = genre_sales.sort_values(ascending=True)
+genre_sales_sorted.plot(x='total_sales',y='genre',kind='barh',figsize=[10,10],title='Ventas por genero',color='pink')
+plt.show()
+
+genre_platform = last_5_years.groupby(['genre','platform'])['total_sales'].sum()
+genre_platform_df = genre_platform.reset_index()
+print(genre_platform_df.sort_values(by='total_sales',ascending=False).head(10))
+
+genre_platform_mean = last_5_years.groupby('genre')['total_sales'].mean()
+genre_platform_mean_df = genre_platform_mean.reset_index()
+#print(genre_platform_mean_df.sort_values(by='total_sales',ascending=False).head(10))
+genre_sales_mean_sorted = genre_platform_mean_df.sort_values(by='total_sales',ascending=False)
+print(genre_sales_mean_sorted)
+
+import matplotlib.pyplot as plt
+
+# Plot horizontal bar chart (easier to read genre names)
+plt.figure(figsize=(10, 8))
+plt.barh(genre_sales_mean_sorted['genre'], genre_sales_mean_sorted['total_sales'], color='skyblue')
+plt.xlabel('Average Total Sales')
+plt.ylabel('Genre')
+plt.title('Average Sales by Genre')
+plt.tight_layout()
+plt.show()
+
+
+En base a los análisis que hemos hecho, podemos ver que:
+
+* Los 5 géneros que más ventas tienen son: Action, Sports, Shooter, Role-Playing, Misc
+* En comparacion con el grafico anterior, los generos con una media mas alta son:Shooter, Platform, Sports, Role-Playing, Racing.
+    * Esto no quiere decir que hayan tenido mayores ventas, puede significar que tenga valores atípicos que puedan estar afectando la media.
+* En base a los géneros más vendidos, las plataformas con más ventas son: PS3, X360, PS4,XOne, 3DS
+
+
+## Crea un perfil de usuario para cada región
+
+Para cada región (NA, UE, JP) determina:
+
+* Las cinco plataformas principales. Describe las variaciones en sus cuotas de mercado de una región a otra.
+* Los cinco géneros principales. Explica la diferencia.
+* Si las clasificaciones de ESRB afectan a las ventas en regiones individuales.
+
+### Para cada región (NA, UE, JP) determina: Las cinco plataformas principales. Describe las variaciones en sus cuotas de mercado de una región a otra.
+
+games.info()
+
+na_sales_platform = last_5_years.groupby('platform')['na_sales'].sum()
+na_sales_platform_df = na_sales_platform.reset_index()
+na_sales_sorted = na_sales_platform_df.sort_values(by='na_sales',ascending=False)
+print(na_sales_sorted.head(10))
+
+eu_sales_platform = last_5_years.groupby('platform')['eu_sales'].sum()
+eu_sales_platform_df = eu_sales_platform.reset_index()
+eu_sales_sorted = eu_sales_platform_df.sort_values(by='eu_sales',ascending=False)
+print(eu_sales_sorted.head(10))
+
+jp_sales_platform = games.groupby('platform')['jp_sales'].sum()
+jp_sales_platform_df = jp_sales_platform.reset_index()
+jp_sales_sorted = jp_sales_platform_df.sort_values(by='jp_sales',ascending=False)
+print(jp_sales_sorted.head(10))
+
+other_sales_platform = last_5_years.groupby('platform')['other_sales'].sum()
+other_sales_platform_df = other_sales_platform.reset_index()
+other_sales_sorted = other_sales_platform_df.sort_values(by='other_sales',ascending=False)
+print(other_sales_sorted.head(10))
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Crear figura con 4 subplots en una cuadrícula 2x2
+fig, axes = plt.subplots(2, 2, figsize=(18, 14))
+
+# Gráfico 1: Ventas en Norteamérica (esquina superior izquierda)
+sns.barplot(x='platform', y='na_sales', data=na_sales_sorted.head(10), ax=axes[0, 0], palette='Blues_d')
+axes[0, 0].set_title('Top 10 Plataformas por Ventas en Norteamérica', fontsize=14)
+axes[0, 0].set_xlabel('Plataforma', fontsize=12)
+axes[0, 0].set_ylabel('Ventas NA (millones)', fontsize=12)
+axes[0, 0].tick_params(axis='x', rotation=45)
+
+# Gráfico 2: Ventas en Europa (esquina superior derecha)
+sns.barplot(x='platform', y='eu_sales', data=eu_sales_sorted.head(10), ax=axes[0, 1], palette='Greens_d')
+axes[0, 1].set_title('Top 10 Plataformas por Ventas en Europa', fontsize=14)
+axes[0, 1].set_xlabel('Plataforma', fontsize=12)
+axes[0, 1].set_ylabel('Ventas EU (millones)', fontsize=12)
+axes[0, 1].tick_params(axis='x', rotation=45)
+
+# Gráfico 3: Ventas en Japón (esquina inferior izquierda)
+sns.barplot(x='platform', y='jp_sales', data=jp_sales_sorted.head(10), ax=axes[1, 0], palette='Reds_d')
+axes[1, 0].set_title('Top 10 Plataformas por Ventas en Japón', fontsize=14)
+axes[1, 0].set_xlabel('Plataforma', fontsize=12)
+axes[1, 0].set_ylabel('Ventas JP (millones)', fontsize=12)
+axes[1, 0].tick_params(axis='x', rotation=45)
+
+# Gráfico 4: Ventas en Otras Regiones (esquina inferior derecha)
+sns.barplot(x='platform', y='other_sales', data=other_sales_sorted.head(10), ax=axes[1, 1], palette='Purples_d')
+axes[1, 1].set_title('Top 10 Plataformas por Ventas en Otras Regiones', fontsize=14)
+axes[1, 1].set_xlabel('Plataforma', fontsize=12)
+axes[1, 1].set_ylabel('Ventas Otras Regiones (millones)', fontsize=12)
+axes[1, 1].tick_params(axis='x', rotation=45)
+
+# Ajustar espaciado entre subplots
+plt.tight_layout()
+plt.suptitle('Comparación de Ventas por Región y Plataforma', fontsize=18, y=1.02)
+plt.show()
+
+A través de estos gráficos podemos ver:
+
+* Las ventas en Europa y las ventas en Otras regiones se parecen.
+* Las plataformas con más ventas en Japón son las que más difieren del resto.
+* Podemos ver que la plataforma PS2 aparece en los cuatro gráficos con buenas ventas.
+
+
+Top 5 plataformas en Norteamerica:
+
+* X360
+* PS3
+* PS4
+* XOne
+* 3DS
+
+Top 5 plataformas en Europa:
+
+* PS3
+* PS4
+* X360
+* 3DS
+* PC
+
+Top 5 plataformas en Japon:
+
+* DS
+* PS
+* PS2
+* SNES
+* 3DS
+
+### Los cinco géneros principales. Explica la diferencia.
+
+na_sales_genre = last_5_years.groupby('genre')['na_sales'].sum()
+na_sales_genre_df = na_sales_genre.reset_index()
+na_sales_genre_sorted = na_sales_genre_df.sort_values(by='na_sales',ascending=False)
+print(na_sales_genre_sorted.head())
+
+eu_sales_genre = last_5_years.groupby('genre')['eu_sales'].sum()
+eu_sales_genre_df = eu_sales_genre.reset_index()
+eu_sales_genre_sorted = eu_sales_genre_df.sort_values(by='eu_sales',ascending=False)
+print(eu_sales_genre_sorted.head())
+
+jp_sales_genre = last_5_years.groupby('genre')['jp_sales'].sum()
+jp_sales_genre_df = jp_sales_genre.reset_index()
+jp_sales_genre_sorted = jp_sales_genre_df.sort_values(by='jp_sales',ascending=False)
+print(jp_sales_genre_sorted.head())
+
+Entre los géneros de juegos principales por región, podemos ver que:
+
+* Los géneros que están presentes en todas las regiones son: Action, Misc
+* Estados Unidos y Europa tienen preferencias casi idénticas, solo varían en un género (EEUU: Misc, Europa: Racing)
+* La región con gustos diferentes es Japón.
+
+### Si las clasificaciones de ESRB afectan a las ventas en regiones individuales.
+
+games.info()
+
+na_classification_sales = last_5_years.groupby('rating')['na_sales'].sum()
+na_classification_sales_df = na_classification_sales.reset_index()
+na_classification_sorted = na_classification_sales_df.sort_values(by='na_sales',ascending=False)
+
+print(na_classification_sorted)
+
+eu_classification_sales = last_5_years.groupby('rating')['eu_sales'].sum()
+eu_classification_sales_df = eu_classification_sales.reset_index()
+eu_classification_sorted = eu_classification_sales_df.sort_values(by='eu_sales',ascending=False)
+
+print(eu_classification_sorted)
+
+jp_classification_sales = last_5_years.groupby('rating')['jp_sales'].sum()
+jp_classification_sales_df = jp_classification_sales.reset_index()
+jp_classification_sorted = jp_classification_sales_df.sort_values(by='jp_sales',ascending=False)
+
+print(jp_classification_sorted)
+
+Podemos ver que en realidad si importa la clasificación de los juegos. Ya que:
+
+* En las regiones de EEUU y Europa, de nuevo notamos similitudes, los juegos M (mature) y E (everyone), son los que presentan mayores ventas
+* En Japón, las mayores ventas se las llevan E (everyone) y T (teen)
+* Para Japón, se deben enfocar las publicidades de manera diferente, ya que allí la consumición de usuarios varía de las otras regiones
+
+
+
+## Prueba las siguientes hipótesis:
+
+
+### Las calificaciones promedio de los usuarios para las plataformas Xbox One y PC son las mismas.
+
+#filtrar por plataforma
+pc_ratings = last_5_years[last_5_years['platform']=='PC']['user_score']
+xone_ratings = last_5_years[last_5_years['platform']=='XOne']['user_score']
+
+pc_mean = pc_ratings.mean()
+xone_mean = xone_ratings.mean() 
+
+print('La media de PC es:',pc_mean)
+print('La media de Xbox One es:',xone_mean)
+print()
+
+#prueba t
+from scipy import stats
+
+t_stat, p_value = stats.ttest_ind(pc_ratings, xone_ratings, equal_var=False)
+print(f"Estadístico t: {t_stat}")
+print(f"Valor p: {p_value}")
+print()
+
+#resultados
+alpha = 0.05
+if p_value < alpha:
+    print("Rechazamos la hipótesis nula. Hay una diferencia significativa entre las calificaciones.")
+else:
+    print("No podemos rechazar la hipótesis nula. No hay evidencia suficiente para afirmar que las calificaciones son diferentes.")    
+
+
+
+*En base al resultado de nuestra hipotesis, no hay una diferencia significativa entre las calificaciones. Es decir,no hay evidencia estadística de que sean diferentes.*
+
+* H₀ (hipótesis nula): Las calificaciones promedio de los usuarios para las plataformas Xbox One y PC son iguales.
+* H₁ (hipótesis alternativa): Las calificaciones promedio de los usuarios para las plataformas Xbox One y PC son diferentes.
+
+
+Elegimos alpha como 0.05 ya que es uno de los mayormente aceptados, y tambien, tiene un margen aceptable de error y acierto.
+
+
+
+### Las calificaciones promedio de los usuarios para los géneros de Acción y Deportes son diferentes.
+
+#filtramos por genero
+action_rating = last_5_years[last_5_years['genre']=='Action']['user_score']
+sports_rating = last_5_years[last_5_years['genre']=='Sports']['user_score']
+
+# calculamos la media
+action_mean = action_rating.mean()
+sports_mean = sports_rating.mean()
+
+print('La media de Acción es:',action_mean)
+print('La media de Deportes es:',sports_mean)
+print()
+
+t_stat, p_value = stats.ttest_ind(action_rating, sports_rating, equal_var=False)
+print(f"Estadístico t: {t_stat}")
+print(f"Valor p: {p_value}")
+print()
+
+
+alpha = 0.05
+if p_value < alpha:
+    print("Rechazamos la hipótesis nula. Hay evidencia estadística de que las calificaciones promedio de Acción y Deportes son diferentes.")
+else:
+    print("No podemos rechazar la hipótesis nula. No hay evidencia suficiente para afirmar que las calificaciones promedio son diferentes.")
+
+
+
+En base al resultado de nuestra hipotesis, no hay una diferencia significativa entre las calificaciones. Es decir las calificaciones promedio de los usuarios para los géneros de Acción y Deportes no son diferentes.
+
+* H₀ (hipótesis nula): Las calificaciones promedio de los usuarios para los géneros de Acción y Deportes son iguales.
+* H₁ (hipótesis alternativa): Las calificaciones promedio de los usuarios para los géneros de Acción y Deportes son diferentes.
+
+Elegimos alpha como 0.05 ya que es uno de los mayormente aceptados, y tambien, tiene un margen aceptable de error y acierto.
+
+## Conclusión
+
+Nuestro objetivo en este análisis fue el determinar las tendencias del año 2016, las cuáles serán utilizadas para elaborar campañas de publicidad en el año 2017.
+
+Nuestros hallazgos fueron:
+
+* Las regiones de Europa y Estados Unidos tienen comportamientos de consumo parecidos, por lo que el equipo de marketing de ambas regiones pueden compartir estrategias (lo cual agilizará el lanzamiento de las campañas).
+
+* La región de Japón presenta gustos diferentes, es por eso que, se recomienda que para la realización de campañas, en el equipo haya por lo menos una persona que forme parte de la región. Esto se debe a que en caso de solo sean extranjeros quienes realicen la campaña, existe un riesgo alto de que no se alcance lo esperado. 
+
+* Podemos ver que los géneros de mayor venta fueron: acción, deportes y miscelánea. Por lo tanto, sería apropiado enfocar la mayor cantidad de campañas a ese sector.
+
+* A través de los análisis, pudimos ver que la clasificación de los juegos si afecta a las ventas:
+
+    * Para las regiones de EEUU y Europa, la clasificación con más ventas es M (mature), esto significa que es consumido por personas mayores a 18 años. Se recomienda averiguar la franja etaria de los usuarios con mayor consumición, para así enfocar las estrategias de marketing correctamente. Por ejemplo, para la franja etaria de 18 a 25 años, los influencers de Twitch y tiktok tendrían más relevancia. Para las edades de 26 a 35, Instagram sería una mejor opción. Y para los más adultos, anuncios en Facebook podrían utilizarse.
+    * En Japón, la clasificación "E" (apta para todo público) tiene la mayor cantidad de ventas. Esto puede deberse a que en este grupo están incluidos los niños. Se recomienda que los juegos de esta clasificación sean publicitados en áreas dónde los niños puedan acceder a ellos, por ejemplo, en los parques de juego o en los comerciales de programas infantiles.
+
+* La PS3 es la única plataforma que aparece en el top 5 de Norteamérica y Europa. Por lo tanto, publicitar juegos pertenecientes a esta plataforma generaría mayores ingresos.
+
+* En Japón, la gama de PS no tiene mucha cantidad de usuarios. Es por eso, que las publicidades deben enfocarse en las otras plataformas como: DS, SNES, 3DS.
+
