@@ -1,0 +1,781 @@
+# ¿Cuál es la mejor tarifa?
+
+Trabajas como analista para el operador de telecomunicaciones Megaline. La empresa ofrece a sus clientes dos tarifas de prepago, Surf y Ultimate. El departamento comercial quiere saber cuál de las tarifas genera más ingresos para poder ajustar el presupuesto de publicidad.
+
+Vas a realizar un análisis preliminar de las tarifas basado en una selección de clientes relativamente pequeña. Tendrás los datos de 500 clientes de Megaline: quiénes son los clientes, de dónde son, qué tarifa usan, así como la cantidad de llamadas que hicieron y los mensajes de texto que enviaron en 2018. Tu trabajo es analizar el comportamiento de los clientes y determinar qué tarifa de prepago genera más ingresos.
+**En este proyecto analizaremos a la empresa Megaline. Específicamente, tenemos interés en saber la preferencia de los usuarios entre los planes Surf y Ultimate.**
+
+Para llevar a cabo este análisis lo que haremos será:
+* Extraer los datos a nuestra área de trabajo (Jupyterhub)
+* Limpiar los datos (analizar si hay valores en blanco, nulos. También verificar si hay duplicados)
+* Transformación de los datos (para poder realizar nuestros análisis, necesitaremos: combinar tablas, agrupar las tablas de manera específica, extraer cierta información de las tablas asi como meses específicos)
+* Luego, comenzaremos con los análisis estadísticos. Nuestro objetivo es determinar: El ingreso promedio de los usuarios de las tarifas Ultimate y Surf difiere; El ingreso promedio de los usuarios en el área de estados Nueva York-Nueva Jersey es diferente al de los usuarios de otras regiones.
+
+
+## Inicialización
+# Cargar todas las librerías
+import pandas as pd
+import numpy as np
+from scipy import stats as st
+from math import factorial
+import matplotlib.pyplot as plt
+
+
+## Cargar datos
+# Carga los archivos de datos en diferentes DataFrames
+users = pd.read_csv("/datasets/megaline_users.csv")
+plans = pd.read_csv("/datasets/megaline_plans.csv")
+messages = pd.read_csv("/datasets/megaline_messages.csv")
+internet = pd.read_csv("/datasets/megaline_internet.csv")
+calls = pd.read_csv("/datasets/megaline_calls.csv")
+
+
+## Preparar los datos
+print("Users:")
+users.info()
+print()
+print("Plans:")
+plans.info()
+print()
+print("Messages:")
+messages.info()
+print()
+print("Internet:")
+internet.info()
+print()
+print("Calls:")
+calls.info()
+print()
+
+
+## Tarifas
+# Imprime la información general/resumida sobre el DataFrame de las tarifas
+plans.info()
+# Imprime una muestra de los datos para las tarifas
+print(plans)
+
+*Podemos ver que en la tabla "Plans", la columna 2 'mb_per_month_included', está en MB pero la empresa cobra en GB. Los datos se convertiran a GB. Asi tambien, para facilitar nuestros análisis, utilizaremos la columna 'plan_name' como índice.*
+
+
+## Corregir datos
+# Convertir MB a GB (redondeo hacia arriba porque la empresa cobra GB completos)
+plans["gb_per_month_included"] = np.ceil(plans["mb_per_month_included"] / 1024)
+
+# Recalcular el costo por GB
+#plans["calculated_usd_per_gb"] = plans["usd_monthly_pay"] / plans["gb_per_month_included"]
+
+# Comparar los valores calculados con los originales
+#print(plans[["plan_name", "usd_per_gb", "calculated_usd_per_gb"]])
+#plans = plans.set_index("plan_name")
+plans.info()
+print(plans)
+
+*Para facilitar la lectura de los datos, fijamos los nombres de los planes como índice.
+
+
+## Enriquecer los datos
+calculated_usd_per_gb = plans["usd_monthly_pay"] / plans["gb_per_month_included"]
+print(calculated_usd_per_gb)
+print()
+difference = plans["usd_per_gb"] - calculated_usd_per_gb
+print(difference)
+print()
+print(plans.head())
+*Basados en los cálculos que hemos hecho, podemos ver que el costo de dólares por GB fue asignado de una manera específica. Por cuestiones de realizar el ejercicio, se decide continuar con los precios 
+fijados por la empresa.
+Pero sería interesante descubrir en base a que fijan los precios.
+
+
+## Usuarios/as
+# Imprime la información general/resumida sobre el DataFrame de usuarios
+users.info()
+# Imprime una muestra de datos para usuarios
+users.sample(10)
+
+
+### Corregir los datos
+users["reg_date"] = pd.to_datetime(users["reg_date"],format='%Y-%m-%d')
+users["churn_date"] = pd.to_datetime(users["churn_date"],format='%Y-%m-%d')
+users.info()
+
+
+### Enriquecer los datos
+#print(users.duplicated().sum())
+
+status_list = []
+for value in users["churn_date"]:
+    if pd.isna(value):
+        status_list.append("continues")
+    else:
+        status_list.append("finished")
+
+#print(status_list)
+users["status"] = status_list
+print(users.head())
+Aquí hemos:
+
+* Cambiado reg_date y churn_date a datetime (en el momento de los cálculos, será más fácil)
+* Revisado si existían duplicados (el resultado salió cero)
+* Los espacios en blanco en churn_date, para evitar alteraciones en los cálculos, se dejaron en blanco. Es por eso que se agregó una nueva columna (status), para saber si el usuario sigue o ya finalizó su plan.
+
+
+
+## Llamadas
+# Imprime la información general/resumida sobre el DataFrame de las llamadas
+calls.info()
+
+# Imprime una muestra de datos para las llamadas
+
+print(calls.sample(10))
+print()
+print(calls["user_id"].duplicated().sum())
+print(calls["call_date"].duplicated().sum())
+print()
+print(calls["duration"].describe())
+print()
+print(calls[calls["duration"]<0])
+
+Podemos ver que:
+
+* el tipo de dato de la fecha es object, lo vamos a cambiar a datetime
+* no hay duplicados, los que vemos ahí pueden significar únicamente que el mismo user_id hizo más de una llamada el mismo día
+* la duración mínima de una llamada es de 0.0 (verificamos si hay valores negativos y no hay).
+* la duración máxima de una llamada puede ser der 37 minutos. No es un valor atípico.
+* Para facilitar análisis, podemos dividir la columna de fechas en mes, día, y año.
+
+
+
+### Corregir los datos
+calls["call_date"]=pd.to_datetime(calls["call_date"])
+calls.info()
+
+
+### Enriquecer los datos
+calls['year']=calls['call_date'].dt.year
+calls['month']=calls['call_date'].dt.month
+calls['day'] = calls['call_date'].dt.day
+calls['weekday']=calls['call_date'].dt.day_name()
+
+print(calls.head())
+
+
+## Mensajes
+# Imprime la información general/resumida sobre el DataFrame de los mensajes
+
+messages.info()
+# Imprime una muestra de datos para los mensajes
+print(messages.sample(10))
+print()
+print(messages.duplicated().sum())
+print(messages['user_id'].duplicated().sum())
+Podemos ver
+
+* la fecha tiene tipo object, lo cambiaremos a datetime
+* no hay duplicados ni espacios en blanco
+* para facilitar calculos, separaremos dia, mes, año
+* podemos calcular la cantidad de mensajes que manda cada usuario
+
+
+### Corregir los datos
+messages['message_date']= pd.to_datetime(messages['message_date'])
+messages.info()
+
+
+### Enriquecer los datos
+messages['year']=messages['message_date'].dt.year
+messages['month']=messages['message_date'].dt.month
+messages['day']=messages['message_date'].dt.day
+messages['day']=messages['message_date'].dt.day_name()
+
+#print(messages.sample(10))
+print()
+messages_per_user = messages['user_id'].value_counts()
+print(messages['user_id'],messages_per_user)
+
+
+## Internet
+# Imprime la información general/resumida sobre el DataFrame de internet
+
+internet.info()
+# Imprime una muestra de datos para el tráfico de internet
+
+print(internet.sample(10))
+print(internet.duplicated().sum())
+print(internet['mb_used'].describe())
+Podemos ver:
+
+* No hay duplicados
+* No hay espacios en blanco
+* Cambiaremos la fecha a datetime, y sacaremos mes, year y dia
+* Podriamos agregar una nueva columna, para saber cuanto es en GB (ya que esta en mb)
+
+
+### Corregir los datos
+internet['session_date']=pd.to_datetime(internet['session_date'])
+print(internet.info())
+
+
+### Enriquecer los datos
+internet['year'] = internet['session_date'].dt.year
+internet['month'] = internet['session_date'].dt.month
+internet['day'] = internet['session_date'].dt.day
+internet['weekday'] = internet['session_date'].dt.day_name()
+
+internet['gb_used'] = internet['mb_used']/1024 
+
+print(internet.sample(10))
+
+
+
+## Estudiar las condiciones de las tarifas
+# Imprime las condiciones de la tarifa y asegúrate de que te quedan claras
+
+print(plans)
+## Agregar datos por usuario
+
+# Calcula el número de llamadas hechas por cada usuario al mes. Guarda el resultado.
+
+calls_by_user = calls.groupby(["user_id","month"])["id"].count().reset_index()
+calls_by_user.rename(columns={"user_id":"user_id","month":"month","id":"num_calls"}, inplace=True)
+
+print(calls_by_user)
+#pivot_calls = calls.pivot_table(index=['user_id', 'month'],
+                            #values='duration',  
+                            #aggfunc=['sum','count']).reset_index()
+
+#print(pivot_calls)
+# Calcula la cantidad de minutos usados por cada usuario al mes. Guarda el resultado.
+
+minutes_per_user = calls.groupby(["user_id","month"])["duration"].sum().reset_index()
+minutes_per_user.rename(columns={"duration": "total_minutes"}, inplace=True)
+print(minutes_per_user)
+# Calcula el número de mensajes enviados por cada usuario al mes. Guarda el resultado.
+
+
+messages_per_user = messages.groupby(["user_id", "month"])["id"].count().reset_index()
+messages_per_user.rename(columns={"id":"num_messages"}, inplace=True)
+print(messages_per_user)
+
+
+# Calcula el volumen del tráfico de Internet usado por cada usuario al mes. Guarda el resultado.
+#print(internet.head())
+
+mb_used_per_user = internet.groupby(["user_id","month"])["mb_used"].sum().reset_index()
+mb_used_per_user.rename(columns={"mb_used":"total_mb_used"}, inplace=True)
+print(mb_used_per_user)
+# Fusiona los datos de llamadas, minutos, mensajes e Internet con base en user_id y month
+# Merge calls and minutes
+calls_data = pd.merge(calls_by_user, minutes_per_user, on=["user_id", "month"], how="outer")
+
+# Merge with messages
+calls_messages_data = pd.merge(calls_data, messages_per_user, on=["user_id", "month"], how="outer")
+
+# Merge with internet data
+final_data = pd.merge(calls_messages_data, mb_used_per_user, on=["user_id", "month"], how="outer")
+
+# Check the final merged dataset
+print(final_data.head())
+
+
+# Añade la información de la tarifa
+user_data = pd.merge(users,final_data,on="user_id",how="outer")
+#print(user_data.head())
+#print()
+#print(plans)
+plans.rename(columns={"plan_name":"plan"}, inplace=True)
+#print()
+#print(plans)
+user_plan= pd.merge(user_data,plans,on="plan",how="left")
+print(user_plan)
+print(plans.info())
+print()
+#print(user_data.head())
+print()
+print(user_plan.info())
+# Calcula el ingreso mensual para cada usuario
+#first code
+
+
+# Calculate extra usage
+user_plan["extra_minutes"] = user_plan["total_minutes"] - user_plan["minutes_included"]
+user_plan["extra_messages"] = user_plan["num_messages"] - user_plan["messages_included"]
+user_plan["extra_mb"] = user_plan["total_mb_used"] - user_plan["mb_per_month_included"]
+user_plan["extra_gb"] = user_plan["extra_mb"] / 1024
+
+
+# Ensure we only charge for extra usage (if negative, set to 0)
+user_plan["extra_minutes"] = user_plan["extra_minutes"].apply(lambda x: max(x, 0))
+user_plan["extra_messages"] = user_plan["extra_messages"].apply(lambda x: max(x, 0))
+user_plan["extra_gb"] = user_plan["extra_gb"].apply(lambda x: max(x, 0))
+
+# Calculate extra charges
+user_plan["extra_minutes_cost"] = user_plan["extra_minutes"] * user_plan["usd_per_minute"]
+user_plan["extra_messages_cost"] = user_plan["extra_messages"] * user_plan["usd_per_message"]
+user_plan["extra_mb_cost"] = user_plan["extra_gb"] * user_plan["usd_per_gb"]
+
+# Make sure these charges are 0 if there’s no extra usage
+user_plan["extra_minutes_cost"] = user_plan["extra_minutes_cost"].apply(lambda x: 0 if x < 0 else x)
+user_plan["extra_messages_cost"] = user_plan["extra_messages_cost"].apply(lambda x: 0 if x < 0 else x)
+user_plan["extra_mb_cost"] = user_plan["extra_mb_cost"].apply(lambda x: 0 if x < 0 else x)
+
+# Total revenue per user per month
+user_plan["total_revenue"] = (
+    user_plan["usd_monthly_pay"]
+    + user_plan["extra_minutes_cost"]
+    + user_plan["extra_messages_cost"]
+    + user_plan["extra_mb_cost"]
+)
+
+user_plan["total_revenue"] = user_plan["total_revenue"].fillna(user_plan["usd_monthly_pay"])
+
+# Display final revenue data
+print(user_plan[["user_id", "month", "total_revenue"]])
+
+user_plan.info()
+# Calcula el ingreso mensual para cada usuario
+#new code
+
+# Round call duration to the nearest whole number
+user_plan["total_minutes"] = user_plan["total_minutes"].round()
+
+# Round megabytes to gigabytes before computing extra usage
+user_plan["gb_per_month_included"] = (user_plan["mb_per_month_included"] / 1024).round()
+
+# Calculate extra usage
+user_plan["extra_minutes"] = user_plan["total_minutes"] - user_plan["minutes_included"]
+user_plan["extra_messages"] = user_plan["num_messages"] - user_plan["messages_included"]
+user_plan["extra_mb"] = user_plan["total_mb_used"] - user_plan["mb_per_month_included"]
+user_plan["extra_gb"] = (user_plan["extra_mb"] / 1024).round()  # Round after conversion
+
+# Ensure we only charge for extra usage (if negative, set to 0)
+user_plan["extra_minutes"] = user_plan["extra_minutes"].apply(lambda x: max(x, 0))
+user_plan["extra_messages"] = user_plan["extra_messages"].apply(lambda x: max(x, 0))
+user_plan["extra_gb"] = user_plan["extra_gb"].apply(lambda x: max(x, 0))
+
+# Calculate extra charges
+user_plan["extra_minutes_cost"] = user_plan["extra_minutes"] * user_plan["usd_per_minute"]
+user_plan["extra_messages_cost"] = user_plan["extra_messages"] * user_plan["usd_per_message"]
+user_plan["extra_mb_cost"] = user_plan["extra_gb"] * user_plan["usd_per_gb"]
+
+# Make sure these charges are 0 if there’s no extra usage
+user_plan["extra_minutes_cost"] = user_plan["extra_minutes_cost"].apply(lambda x: max(x, 0))
+user_plan["extra_messages_cost"] = user_plan["extra_messages_cost"].apply(lambda x: max(x, 0))
+user_plan["extra_mb_cost"] = user_plan["extra_mb_cost"].apply(lambda x: max(x, 0))
+
+# Total revenue per user per month
+user_plan["total_revenue"] = (
+    user_plan["usd_monthly_pay"]
+    + user_plan["extra_minutes_cost"]
+    + user_plan["extra_messages_cost"]
+    + user_plan["extra_mb_cost"]
+)
+
+user_plan["total_revenue"] = user_plan["total_revenue"].fillna(user_plan["usd_monthly_pay"])
+
+# Display final revenue data
+print(user_plan[["user_id", "month", "total_revenue"]])
+
+user_plan.info()
+
+print(user_plan[["total_minutes", "num_messages", "total_mb_used","num_calls"]].isnull().sum())
+Los valores NaN en total_minutes, num_messages y total_mb_used pueden indicar que algunos usuarios no usaron esos servicios en ciertos meses.
+user_plan["total_minutes"].fillna(0, inplace=True)
+user_plan["num_messages"].fillna(0, inplace=True)
+user_plan["total_mb_used"].fillna(0, inplace=True)
+user_plan["num_calls"].fillna(0, inplace=True)
+# run the new code again
+#new code
+
+# Round call duration to the nearest whole number
+user_plan["total_minutes"] = user_plan["total_minutes"].round()
+
+# Round megabytes to gigabytes before computing extra usage
+user_plan["gb_per_month_included"] = (user_plan["mb_per_month_included"] / 1024).round()
+
+# Calculate extra usage
+user_plan["extra_minutes"] = user_plan["total_minutes"] - user_plan["minutes_included"]
+user_plan["extra_messages"] = user_plan["num_messages"] - user_plan["messages_included"]
+user_plan["extra_mb"] = user_plan["total_mb_used"] - user_plan["mb_per_month_included"]
+user_plan["extra_gb"] = (user_plan["extra_mb"] / 1024).round()  # Round after conversion
+
+# Ensure we only charge for extra usage (if negative, set to 0)
+user_plan["extra_minutes"] = user_plan["extra_minutes"].apply(lambda x: max(x, 0))
+user_plan["extra_messages"] = user_plan["extra_messages"].apply(lambda x: max(x, 0))
+user_plan["extra_gb"] = user_plan["extra_gb"].apply(lambda x: max(x, 0))
+
+# Calculate extra charges
+user_plan["extra_minutes_cost"] = user_plan["extra_minutes"] * user_plan["usd_per_minute"]
+user_plan["extra_messages_cost"] = user_plan["extra_messages"] * user_plan["usd_per_message"]
+user_plan["extra_mb_cost"] = user_plan["extra_gb"] * user_plan["usd_per_gb"]
+
+# Make sure these charges are 0 if there’s no extra usage
+user_plan["extra_minutes_cost"] = user_plan["extra_minutes_cost"].apply(lambda x: max(x, 0))
+user_plan["extra_messages_cost"] = user_plan["extra_messages_cost"].apply(lambda x: max(x, 0))
+user_plan["extra_mb_cost"] = user_plan["extra_mb_cost"].apply(lambda x: max(x, 0))
+
+# Total revenue per user per month
+user_plan["total_revenue"] = (
+    user_plan["usd_monthly_pay"]
+    + user_plan["extra_minutes_cost"]
+    + user_plan["extra_messages_cost"]
+    + user_plan["extra_mb_cost"]
+)
+
+user_plan["total_revenue"] = user_plan["total_revenue"].fillna(user_plan["usd_monthly_pay"])
+
+# Display final revenue data
+print(user_plan[["user_id", "month", "total_revenue"]])
+
+user_plan.info()
+
+
+## Estudia el comportamiento de usuario
+### Llamadas
+# Compara la duración promedio de llamadas por cada plan y por cada mes. Traza un gráfico de barras para visualizarla.
+
+num_calls_avg = user_plan.groupby(["plan","month"])["total_minutes"].mean()
+#print(num_calls_avg)
+
+#num_calls_avg.plot(x='month',y='total_minutes',legend='plan',title='Duracion promedio de llamadas', color='pink',kind='bar')
+
+# Plotting the results
+# Since the data has a MultiIndex (plan and month), we'll use a bar plot with the MultiIndex labels
+num_calls_avg.unstack().plot(kind='bar', figsize=(6, 6))
+
+# Adding labels and title to the plot
+plt.title('Average Call Duration per Plan and Month')
+plt.xlabel('Month')
+plt.ylabel('Average Call Duration (Minutes)')
+plt.xticks(rotation=45)  # Rotate x-axis labels for better readability
+plt.legend(title='Month', bbox_to_anchor=(1.05, 1), loc='upper left')  # Legend outside the plot
+
+# Show the plot
+plt.tight_layout()
+plt.show()
+
+#Histograma 'Distribucion de minutos al mes por plan'
+import matplotlib.pyplot as plt
+
+
+plt.figure(figsize=(10, 6))
+
+# Plotting the histogram of total minutes for all users in each plan
+for plan in user_plan['plan'].unique():
+    # Filter the data for each plan
+    plan_data = user_plan[user_plan['plan'] == plan]
+    
+    # Plotting the histogram for total minutes used in this plan
+    plt.hist(plan_data['total_minutes'], bins=30, alpha=0.7, label=plan)
+
+# Adding labels and title
+plt.title('Distribucion de minutos al mes por plan')
+plt.xlabel('Total de Minutos Usados')
+plt.ylabel('Numero de usuarios')
+plt.legend(title="Planes")
+
+# Show the plot
+plt.tight_layout()
+plt.show()
+
+# Calcula la media y la varianza de la duración mensual de llamadas.
+#user_plan.info()
+
+calls_avg = user_plan.groupby(["month","plan"])["total_minutes"].mean()
+calls_var = user_plan.groupby(["month","plan"])["total_minutes"].var()
+
+print("La media de la duracion mensual de llamadas:")
+print(calls_avg)
+print()
+print("La varianza de la duracion mensual de llamadas:")
+print(calls_var)
+# Traza un diagrama de caja para visualizar la distribución de la duración mensual de llamadas
+import seaborn as sns
+sns.boxplot(x='month',y='total_minutes',hue="plan",data=user_plan)
+
+plt.xlabel('Meses')
+plt.ylabel('Duracion de las llamadas')
+plt.title('Distribucion mensual de llamadas')
+plt.figure(figsize=[10,6])
+plt.show()
+
+#user_plan.info()
+* En base a la media de la duracion mensual de llamadas podemos deducir que hay una mayoria de personas que utiliza el plan surf. 
+
+* En base al boxplot, no podemos concluir que el comportamiento de las llamadas varia en funcion del plan. Lo que si podemos ver es que la duracion de llamadas tiende a aumentar hacia los ultimos meses, e incluso las llamadas largas.
+
+
+### Mensajes
+user_plan.info()
+# Comprara el número de mensajes que tienden a enviar cada mes los usuarios de cada plan
+
+message_group = user_plan.groupby(["month","plan"])["num_messages"].sum()
+print(message_group)
+#Histograma 'Distribucion de  número de mensajes por plan'
+import matplotlib.pyplot as plt
+
+
+plt.figure(figsize=(10, 6))
+
+# Plotting the histogram of messages for all users in each plan
+for plan in user_plan['plan'].unique():
+    # Filter the data for each plan
+    plan_data_message = user_plan[user_plan['plan'] == plan]
+    
+    # Plotting the histogram for total minutes used in this plan
+    plt.hist(plan_data_message['num_messages'], bins=30, alpha=0.7, label=plan)
+
+# Adding labels and title
+plt.title('Distribucion de mensajes enviados al mes por plan')
+plt.xlabel('Total de mensajes enviados')
+plt.ylabel('Numero de usuarios')
+plt.legend(title="Planes")
+
+# Show the plot
+plt.tight_layout()
+plt.show()
+
+#analizar la media de mensajes enviados
+import seaborn as sns
+messages_mean=user_plan.groupby(["month","plan"])["num_messages"].mean().reset_index()
+#print(messages_mean)
+
+
+sns.barplot(x="month", y="num_messages", hue="plan", data=messages_mean)
+
+plt.xlabel('Meses')
+plt.ylabel('Mensajes enviados')
+plt.title('Comparacion de las medias de mensajes enviados')
+plt.legend(title='Plan')
+plt.show()
+# Traza un diagrama de caja para visualizar la distribución mensual de mensajes
+import seaborn as sns
+sns.boxplot(x='month',y='num_messages',hue="plan",data=user_plan)
+
+plt.xlabel('Meses')
+plt.ylabel('Cantidad de mensajes')
+plt.title('Distribucion mensual de mensajes')
+plt.figure(figsize=[10,6])
+plt.show()
+
+#user_plan.info()
+* Al comparar las medias de los mensajes segun el plan, podemos ver que los usarios de ultimate han mandado mas mensajes. Esto no quiere decir que los usuarios esten mas activos, sino que el plan les permite mandar mas mensajes.
+
+* Al hacer un boxplot de la cantidad de mensajes, podemos ver que en los primeros meses del año, la cantidad de mensajes enviados es menor que durante los últimos meses del año. Podemos ver que hay muchos valores atípicos a partir del 6to mes. Aún así, los patrones de uso no difieren demasiado el uno del otro.
+
+* En el histograma de distribucion de  número de mensajes por plan, podemos ver que los clientes de surf son más activos. Aquí si el comportamiento varia según el plan.
+
+
+
+### Internet
+user_plan.info()
+# Compara la cantidad de tráfico de Internet consumido por usuarios por plan
+internet_group=user_plan.groupby(['month','plan'])['total_mb_used'].sum()
+print(internet_group)
+#Histograma 'Distribucion de trafico de internet por plan'
+import matplotlib.pyplot as plt
+
+
+plt.figure(figsize=(10, 6))
+
+# Plotting the histogram of messages for all users in each plan
+for plan in user_plan['plan'].unique():
+    # Filter the data for each plan
+    plan_data_internet = user_plan[user_plan['plan'] == plan]
+    
+    # Plotting the histogram for total minutes used in this plan
+    plt.hist(plan_data_internet['total_mb_used'], bins=30, alpha=0.7, label=plan)
+
+# Adding labels and title
+plt.title('Distribucion de trafico de internet al mes por plan')
+plt.xlabel('Trafico total')
+plt.ylabel('Numero de usuarios')
+plt.legend(title="Planes")
+
+# Show the plot
+plt.tight_layout()
+plt.show()
+# Traza un diagrama de caja para visualizar la distribución mensual de trafico de internet
+import seaborn as sns
+sns.boxplot(x='month',y='total_mb_used',hue="plan",data=user_plan)
+
+plt.xlabel('Meses')
+plt.ylabel('Trafico de internet')
+plt.title('Distribucion mensual de trafico de internet')
+plt.figure(figsize=[10,6])
+plt.show()
+
+#user_plan.info()
+* Al comparar la cantidad de tráfico de Internet consumido por usuarios por plan, podemos ver que en varios meses, los clientes de surf han tenido mayor actividad. 
+* El histograma tambien nos muestra que los clientes de surf han tenido mayor actividad. 
+* El boxplot no muestra patrones de uso muy diferentes, pero si podemos ver que en los ultimos meses del año, hubo muchos valores atípicos.
+
+Sí se puede ver una tendencia de los clientes de surf, pero no es 100% seguro que la actividad del cliente depende solo del plan que utilice.
+
+
+## Ingreso
+user_plan.info()
+ingresos_group=user_plan.groupby(['month','plan'])['total_revenue'].sum().unstack()
+#print(ingresos_group)
+
+ingresos_group.plot(xlabel='Mes',ylabel='Ingresos totales',legend='Plan',kind='bar')
+plt.show()
+#Histograma 'Distribucion de trafico de internet por plan'
+import matplotlib.pyplot as plt
+
+
+plt.figure(figsize=(10, 6))
+
+# Plotting the histogram of messages for all users in each plan
+for plan in user_plan['plan'].unique():
+    # Filter the data for each plan
+    plan_data_revenue = user_plan[user_plan['plan'] == plan]
+    
+    # Plotting the histogram for total minutes used in this plan
+    plt.hist(plan_data_revenue['total_revenue'], bins=30, alpha=0.7, label=plan)
+
+# Adding labels and title
+plt.title('Distribucion de ingresos al mes por plan')
+plt.xlabel('Ingreso total')
+plt.ylabel('Numero de usuarios')
+plt.legend(title="Planes")
+
+# Show the plot
+plt.tight_layout()
+plt.show()
+# Traza un diagrama de caja para visualizar la distribución mensual de trafico de internet
+import seaborn as sns
+sns.boxplot(x='month',y='total_revenue',hue="plan",data=user_plan)
+
+plt.xlabel('Meses')
+plt.ylabel('Ingresos')
+plt.title('Distribucion mensual de ingresos')
+plt.figure(figsize=[10,6])
+plt.show()
+
+
+En base a la comparacion de:
+
+* Ingresos por planes
+* Histograma
+* Boxplot
+
+Podemos ver que los ingresos del plan surf superan a los del plan ultimate. El plan surf tuvo mayor presencia en todos los meses del año. Esto puede deberse a que el precio del plan surf es menor al del plan ultimate, y a pesar de que un usuario se exceda en el uso, ya que esta pagando nada más 20$, el exceso no sería demasiado.   
+
+
+
+## Prueba las hipótesis estadísticas
+[Prueba la hipótesis de que son diferentes los ingresos promedio procedentes de los usuarios de los planes de llamada Ultimate y Surf.]
+[Elabora las hipótesis nula y alternativa, escoge la prueba estadística, determina el valor alfa.]
+Hipótesis:
+
+* 𝐻0 → No hay diferencia en los ingresos promedio de los planes.
+* 𝐻𝑎 → Sí hay una diferencia en los ingresos promedio de los planes.
+
+ 
+Prueba usada:
+
+* Prueba t de Student para dos muestras independientes.
+
+
+Nivel de significancia:
+
+* α=0.05.
+
+
+Interpretación:
+
+* Si el valor p es menor a 0.05, hay diferencia entre los planes. Si no, no podemos afirmar que haya diferencia.
+
+# Prueba las hipótesis
+import scipy.stats as stats
+
+# Filtrar ingresos por tipo de plan
+ultimate_revenue = user_plan[user_plan["plan"] == "ultimate"]["total_revenue"]
+surf_revenue = user_plan[user_plan["plan"] == "surf"]["total_revenue"]
+
+# Prueba t de Student para dos muestras independientes
+t_stat, p_value = stats.ttest_ind(ultimate_revenue, surf_revenue, equal_var=False)
+
+# Nivel de significancia
+alpha = 0.05
+
+# Resultados
+print(f"Estadístico t: {t_stat:.4f}")
+print(f"Valor p: {p_value:.4f}")
+
+# Interpretación
+if p_value < alpha:
+    print("Rechazamos la hipótesis nula: Hay una diferencia significativa en los ingresos promedio entre Ultimate y Surf.")
+else:
+    print("No podemos rechazar la hipótesis nula: No hay evidencia suficiente para afirmar que los ingresos promedio sean diferentes.")
+
+
+Hipótesis:
+
+* 𝐻0 → El ingreso promedio de los usuarios del área NY-NJ es igual al de los usuarios de otras regiones.
+* 𝐻𝑎 → El ingreso promedio de los usuarios del área NY-NJ es diferente al de los usuarios de otras regiones.
+
+Prueba usada:
+
+* Prueba t de Student para dos muestras independientes (asumiendo varianzas desiguales).
+
+Nivel de significancia:
+
+* α=0.05.
+
+Interpretación:
+
+* Si el valor p es menor a 0.05, rechazamos la hipótesis nula y concluimos que hay diferencia significativa entre los ingresos promedio de usuarios del área NY-NJ y otras regiones. Si el valor p es mayor o igual a 0.05, no podemos rechazar la hipótesis nula y no tenemos suficiente evidencia para afirmar que existe diferencia.
+
+
+# Prueba las hipótesis
+
+import pandas as pd
+import numpy as np
+from scipy import stats
+
+# Assuming your DataFrame is called user_plan
+
+# 1. Create a binary variable for NY-NJ region
+# This assumes cities in NY-NJ have "New York", "NY", "New Jersey", "NJ" in their names
+user_plan['is_ny_nj'] = user_plan['city'].str.contains('New York|NY|New Jersey|NJ', case=False, na=False)
+
+# 2. Split data into two groups
+ny_nj_income = user_plan[user_plan['is_ny_nj']]['usd_monthly_pay']
+other_income = user_plan[~user_plan['is_ny_nj']]['usd_monthly_pay']
+
+# 3. Perform two-sample t-test
+t_stat, p_value = stats.ttest_ind(ny_nj_income, other_income, equal_var=False)
+
+# 4. Set alpha
+alpha = 0.05
+
+# 5. Print results
+# Interpretación del resultado
+if p_value < alpha:
+    print("Rechazamos la hipótesis nula: Hay una diferencia significativa en los ingresos promedio entre usuarios de NY-NJ y otras regiones.")
+else:
+    print("No podemos rechazar la hipótesis nula: No hay evidencia suficiente para afirmar que los ingresos promedio sean diferentes entre NY-NJ y otras regiones.")
+
+
+
+
+
+
+
+## Conclusión general
+Basándome en el análisis realizado, sí, parece razonable sugerir que Megaline debería considerar enfocar más su presupuesto publicitario en el plan Surf. Aquí están las razones principales:
+
+* Mayor generación de ingresos totales: Los datos muestran que el plan Surf generó más ingresos totales que el plan Ultimate consistentemente durante todos los meses del año.
+* Mayor base de usuarios activos: El análisis muestra que hay más usuarios del plan Surf, lo que contribuye a un mayor volumen de ingresos totales.
+* Mayor actividad de uso: Los usuarios de Surf mostraron mayor actividad en mensajería y consumo de internet, lo que podría traducirse en más ingresos por servicios adicionales.
+* Potencial para crecimiento: El menor precio base del plan Surf ($20) parece ser atractivo para los usuarios, quienes luego generan ingresos adicionales al exceder los límites incluidos en el plan.
+
+
+A través de la prueba de hipótesis, pudimos constatar que hay una diferencia significativa en los ingresos promedio entre Ultimate y Surf. Esto valida nuestros anteriores análisis, y podemos confirmar que el plan "Surf" genera más ingresos a la compañía Megaline.
+
+Recomendaría:
+
+* Aumentar la inversión publicitaria en el plan Surf para atraer más usuarios, dado su atractivo precio base y su capacidad demostrada para generar ingresos.
+* Continuar ofreciendo ambos planes, ya que atienden a diferentes segmentos de mercado.
+* En base a nuestra segunda hipótesis, enfocarnos en ciudades grandes como New York. Ya que ahí se encuentran la mayoría de los clientes potenciales.
