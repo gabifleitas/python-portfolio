@@ -4,6 +4,14 @@
 #This is one of the practice projects I did at the Tripleten bootcamp. 
 #I first solved the hypothesis they formulated and then made some discoveries on my own. 
 
+#DESCRIPTION OF THE PROJECT
+#This project analyzes music listening patterns in two cities (Springfield and Shelbyville) across different days of the week. 
+#The analysis confirms the initial hypothesis: user activity differs depending on the day and city. 
+#Significant variations in playback volume are observed between Monday, Wednesday, and Friday, with distinct patterns in each location.
+
+##The insights reveal that the "unknown" category dominates among both most-played artists and songs, suggesting data quality issues. 
+##Other important findings include the presence of implicit duplicates in music genres (such as "hip", "hop" and "hip-hop" which were 
+##consolidated to "hiphop"), allowing for more accurate categorization for comparative analysis between cities and days of the week.
 
 # -*- coding: utf-8 -*-
 """Sprint 3: Manipulación de datos (Data Wrangling)
@@ -183,6 +191,3 @@ print(most_listened_song)
 print()
 print(top_5_songs)
 
-"""**Según los resultados, tanto el artista más escuchado como la canción más escuchada son "unknown". Recordemos que más arriba en el código decidimos poner unknown en las secciones faltantes.
-Por lo tanto, "unknown" puede ser 1 o más artistas así como 1 o más canciones.**
-"""
